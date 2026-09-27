@@ -5,24 +5,20 @@ Moodle Rubric Auto-Grader (Calificador Automático con Rúbrica)
 Resuelve la saturación y fatiga del docente automatizando la selección
 de niveles en rúbricas analíticas de Moodle (mod_assign).
 
-En lugar de hacer clics manuales repetitivos por cada criterio para decenas
-de estudiantes, este script permite:
-1. Inspeccionar y extraer los criterios y niveles de la rúbrica de una tarea.
-2. Aplicar un perfil de calificación predefinido o dinámico (ej. 'Excelente', 'Competente', 'Personalizado').
-3. Seleccionar con precisión los radio buttons / celdas de la rúbrica mediante selectores CSS nativos de Moodle.
-4. Ingresar feedback opcional por criterio y comentario global.
-5. Guardar los cambios y avanzar al siguiente estudiante automáticamente.
-
-Basado en la estructura oficial de Moodle Gradingform Rubric (.gradingform_rubric).
+Novedad:
+- Admite inyección directa de cookie de sesión (`--session MoodleSession=...`).
+- Admite vincular un archivo Excel (`--excel notas.xlsx`) con las notas o niveles por estudiante.
+- Admite operar de forma autónoma guiado por IA o por CLI.
 """
 
 import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 from pathlib import Path
-from playwright.async_api import async_playwright, Page
+from playwright.async_api import async_playwright, Page, BrowserContext
 from core.session_manager import SessionManager, console
 from rich.table import Table
 from rich.panel import Panel
@@ -94,10 +90,10 @@ class MoodleRubricGrader:
     async def apply_grading_profile(self, profile: str, custom_scores: dict | None = None) -> float:
         """
         Selecciona automáticamente las celdas de la rúbrica según la política indicada:
-          - 'max': Selecciona el nivel más alto de cada criterio (100% de puntos).
-          - 'min': Selecciona el nivel más bajo (0 puntos).
-          - 'mid': Selecciona un nivel intermedio (~70% - 80%).
-          - 'custom': Aplica un mapa de criterios a índices de niveles.
+          - 'max': Nivel más alto de cada criterio (100% de puntos).
+          - 'min': Nivel más bajo (0 puntos).
+          - 'mid': Nivel intermedio (~70% - 80%).
+          - 'custom': Mapeo directo por índice de criterio {criterio_idx: nivel_idx}.
         """
         criteria = await self.get_rubric_structure()
         total_score = 0.0
@@ -116,19 +112,16 @@ class MoodleRubricGrader:
             elif profile == "mid":
                 target_level_idx = max(0, len(levels) - 2)
             elif profile == "custom" and custom_scores:
-                target_level_idx = custom_scores.get(str(idx), len(levels) - 1)
+                target_level_idx = custom_scores.get(str(idx), custom_scores.get(idx, len(levels) - 1))
 
-            # Clic directo sobre la celda del nivel en Moodle
-            level_el = levels[target_level_idx]
+            level_el = levels[min(target_level_idx, len(levels) - 1)]
             selector = level_el["selector"]
             
-            # Ejecutar clic con Playwright
             target_locator = self.page.locator(selector).first
             await target_locator.scroll_into_view_if_needed()
             await target_locator.click()
-            await asyncio.sleep(0.15)  # Breve pausa natural de la interfaz
+            await asyncio.sleep(0.15)
 
-            # Extraer puntos numéricos
             score_digits = "".join(ch for ch in level_el["score"] if ch.isdigit() or ch in ".,")
             try:
                 total_score += float(score_digits.replace(",", "."))
@@ -139,9 +132,6 @@ class MoodleRubricGrader:
         return total_score
 
     async def save_and_next(self, save_and_show_next: bool = True):
-        """
-        Guarda los cambios de la calificación actual y avanza al siguiente estudiante.
-        """
         btn_name = "saveandshownext" if save_and_show_next else "savechanges"
         btn_selector = f"input[name='{btn_name}'], button[name='{btn_name}'], button:has-text('Guardar')"
         
@@ -152,24 +142,71 @@ class MoodleRubricGrader:
         console.print("[bold green]✔ Calificación guardada en el servidor de Moodle.[/bold green]")
 
 
+def load_scores_from_excel(excel_path: str, student_identifier: str = "") -> dict:
+    """
+    Lee un archivo Excel con notas o niveles de rúbrica.
+    """
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(excel_path)
+        sheet = wb.active
+        scores = {}
+        # Lectura básica de filas clave-valor o por columna
+        for row in sheet.iter_rows(values_only=True):
+            if row and len(row) >= 2 and row[0] is not None:
+                try:
+                    c_idx = int(row[0])
+                    lvl_idx = int(row[1])
+                    scores[c_idx] = lvl_idx
+                except ValueError:
+                    pass
+        return scores
+    except Exception as e:
+        console.print(f"[bold yellow]⚠ No se pudo procesar el Excel automáticamente: {e}[/bold yellow]")
+        return {}
+
+
 async def main():
     parser = argparse.ArgumentParser(description="Calificador Automático de Rúbricas para Moodle")
-    parser.add_argument("--grading-url", required=True, help="URL de calificación del estudiante en Moodle (mod/assign/view.php?id=XXX&action=grader)")
-    parser.add_argument("--profile", choices=["max", "mid", "min", "custom"], default="max", help="Perfil de calificación a aplicar (default: max)")
-    parser.add_argument("--dry-run", action="store_true", help="Solo inspeccionar y mostrar la rúbrica sin hacer clics ni guardar")
-    parser.add_argument("--headless", action="store_true", help="Ejecutar sin abrir ventana visual")
-    parser.add_argument("--auto-save", action="store_true", help="Guardar automáticamente tras aplicar los clics")
+    parser.add_argument("--grading-url", required=True, help="URL de calificación en Moodle (action=grader)")
+    parser.add_argument("--session", help="Cookie de sesión directa MoodleSession=valor (útil para pasarle directo a la IA)")
+    parser.add_argument("--excel", help="Ruta en disco de un archivo Excel con las notas o niveles por criterio")
+    parser.add_argument("--profile", choices=["max", "mid", "min", "custom"], default="max", help="Perfil de calificación")
+    parser.add_argument("--custom-json", help='JSON con mapeo de niveles, ej: \'{"0": 3, "1": 2, "2": 3}\'')
+    parser.add_argument("--dry-run", action="store_true", help="Solo inspeccionar y mostrar la rúbrica sin hacer clics")
+    parser.add_argument("--headless", action="store_true", help="Ejecutar en segundo plano")
+    parser.add_argument("--auto-save", action="store_true", help="Guardar cambios tras calificar")
 
     args = parser.parse_args()
 
     sm = SessionManager(session_dir="sessions")
-    if not sm.has_session("moodle"):
-        console.print("[bold red]❌ No hay sesión de Moodle guardada. Ejecuta primero:[/bold red]")
-        console.print("   python -m core.session_cli --login moodle\n")
-        sys.exit(1)
-
+    
     async with async_playwright() as p:
-        context = await sm.get_authenticated_context(p, "moodle", headless=args.headless)
+        context: BrowserContext
+        # Prioridad 1: Cookie directa pasada por argumento
+        if args.session:
+            browser = await p.chromium.launch(headless=args.headless)
+            context = await browser.new_context(
+                viewport={"width": 1366, "height": 768},
+                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            )
+            # Extraer valor limpio
+            s_val = args.session.split("=")[-1].strip()
+            domain = args.grading_url.split("//")[-1].split("/")[0]
+            await context.add_cookies([{
+                "name": "MoodleSession",
+                "value": s_val,
+                "domain": domain,
+                "path": "/"
+            }])
+            console.print(f"[bold green]✔ Inyectada cookie directa MoodleSession para dominio:[/bold green] {domain}")
+        elif sm.has_session("moodle"):
+            context = await sm.get_authenticated_context(p, "moodle", headless=args.headless)
+        else:
+            console.print("[bold red]❌ No hay sesión disponible. Usa --session 'MoodleSession=...' o ejecuta primero:[/bold red]")
+            console.print("   python -m core.session_cli --login moodle\n")
+            sys.exit(1)
+
         page = await context.new_page()
 
         console.print(f"[bold cyan]Navegando a la entrega:[/bold cyan] {args.grading_url}")
@@ -180,12 +217,21 @@ async def main():
         criteria = await grader.get_rubric_structure()
         await grader.display_rubric(criteria)
 
+        custom_map = None
+        if args.excel and os.path.exists(args.excel):
+            custom_map = load_scores_from_excel(args.excel)
+            console.print(f"[bold cyan]Notas cargadas desde Excel ({len(custom_map)} criterios):[/bold cyan] {custom_map}")
+            args.profile = "custom"
+        elif args.custom_json:
+            custom_map = json.loads(args.custom_json)
+            args.profile = "custom"
+
         if not args.dry_run:
             console.print(f"\n[bold yellow]Aplicando perfil de calificación '{args.profile}'...[/bold yellow]")
-            await grader.apply_grading_profile(args.profile)
+            await grader.apply_grading_profile(args.profile, custom_scores=custom_map)
 
             if args.auto_save:
-                console.print("\n[bold yellow]Guardando cambios...[/bold yellow]")
+                console.print("\n[bold yellow]Guardando cambios en Moodle...[/bold yellow]")
                 await grader.save_and_next(save_and_show_next=False)
             else:
                 console.print("\n[dim]Modo interactivo: revisa los clics en la pantalla y pulsa guardar manualmente o usa --auto-save.[/dim]")

@@ -1,53 +1,77 @@
-# 🤖 Prompts Especializados para Delegar Tareas a IAs (Antigravity / Claude / ChatGPT)
+# 🤖 Instrucciones para Delegar Tareas a la IA (Antigravity / Claude / ChatGPT)
 
-Si eres un profesor, estudiante o profesional que no sabe programar en Python o no tiene tiempo de configurar scripts, puedes copiar y pegar estos prompts en tu asistente de Inteligencia Artificial (como **Antigravity**) para que ejecute la tarea por ti.
-
----
-
-## 📋 Caso 1: Calificar Tareas de Moodle con Rúbrica Automática
-
-> **Copia y pega este texto a tu IA:**
-> 
-> *"Hola Antigravity. Necesito calificar un lote de entregas en Moodle que tienen rúbrica analítica y me toma demasiado tiempo hacer clics en cada criterio. Por favor ejecuta el script de rúbricas del repositorio `playwright-academic-automator`:
-> 
-> 1. Abre el navegador con la sesión guardada en `sessions/moodle_auth.json`.
-> 2. Navega a esta URL de calificación: `[PEGA_AQUÍ_LA_URL_DE_LA_TAREA_O_ESTUDIANTE]`
-> 3. Aplica el perfil de calificación `max` (o el criterio que te indique).
-> 4. Si los criterios coinciden con la entrega, guarda y avanza al siguiente estudiante.
-> 5. Muéstrame un resumen con la tabla de criterios y el puntaje asignado."*
+Este repositorio está diseñado para que cualquier docente o usuario **no tenga que programar ni tocar la terminal**. Simplemente clonas el repositorio en tu computador y le das instrucciones en lenguaje natural a un agente de Inteligencia Artificial (como **Antigravity**) para que se encargue de todo.
 
 ---
 
-## 📝 Caso 2: Extraer Preguntas y Respuestas de un Examen de Moodle para Estudiar
+## 🔑 Las 3 Formas de Identificarte ante la IA
 
-> **Copia y pega este texto a tu IA:**
-> 
-> *"Hola Antigravity. He terminado un cuestionario en Moodle y quiero respaldar la revisión completa para estudiarla en mi bóveda de Obsidian.
-> 
-> 1. Usa el script `moodle/quiz_extractor.py`.
-> 2. Extrae las preguntas, opciones múltiples, respuestas correctas y feedback de esta URL: `[PEGA_AQUÍ_LA_URL_DE_REVIEW.PHP]`
-> 3. Guarda el archivo Markdown resultante en mi carpeta de notas académicas."*
+Para que la IA pueda navegar en tu Moodle, SAC o Udemy a calificar o extraer información, puedes darle acceso de cualquiera de estas 3 formas:
 
----
-
-## 🎓 Caso 3: Respaldar el Temario y Enlaces de un Curso de Udemy
-
-> **Copia y pega este texto a tu IA:**
-> 
-> *"Hola Antigravity. Quiero un desglose en Markdown de todo el temario de mi curso en Udemy para planificar mi semana de estudio.
-> 
-> 1. Usa `udemy/course_scraper.py`.
-> 2. Navega a este curso: `[PEGA_AQUÍ_LA_URL_DEL_CURSO]`
-> 3. Despliega todas las secciones y genera un checklist en Markdown con cada clase y duración."*
+1. **Pasándole directamente la Cookie de Sesión (`MoodleSession`):**  
+   Abres tu Moodle en el navegador, presionas `F12` (Herramientas de Desarrollador) -> pestaña *Application* (o *Almacenamiento*) -> *Cookies* -> copias el valor de `MoodleSession`.
+2. **Usando el estado guardado (`sessions/moodle_auth.json`):**  
+   Si previamente corriste `python -m core.session_cli --login moodle`.
+3. **Pidiéndole a la IA que te abra la ventana de login:**  
+   La IA lanzará el navegador en tu pantalla para que pongas tu usuario y contraseña con tranquilidad.
 
 ---
 
-## ⚙️ Caso 4: Configurar una Nueva Sesión sin Compartir Contraseñas
+## 📋 Caso 1: Calificar Rúbrica en Moodle Pasándole un Archivo Excel
 
-> **Copia y pega este texto a tu IA:**
+Si tienes las notas o criterios de tus estudiantes organizados en una hoja de cálculo (`.xlsx` o `.csv`):
+
+> **Copia y pega este prompt a tu IA (ej. Antigravity):**
 > 
-> *"Hola Antigravity. Quiero configurar mi sesión para `moodle` (o `sac` / `udemy`) usando `core/session_cli.py`:
+> *"Hola Antigravity. Por favor lee el repositorio local clonado en mi máquina en:  
+> `/ruta/donde/clonaste/playwright-academic-automator`  
 > 
-> 1. Lanza el comando `python -m core.session_cli --login moodle`.
-> 2. Déjame la ventana abierta para que yo ingrese mi usuario, contraseña y 2FA de forma privada.
-> 3. Cuando yo presione Enter en la consola, confirma que el archivo `moodle_auth.json` se guardó correctamente sin registrar mi contraseña en texto plano."*
+> Necesito que califiques una entrega con rúbrica en Moodle usando el script `moodle/rubric_grader.py`.  
+> - **URL de la entrega:** `https://mi-universidad.edu.co/mod/assign/view.php?id=12345&action=grader`  
+> - **Cookie de sesión:** `MoodleSession=TU_VALOR_AQUI` (o usa la sesión guardada en `sessions/moodle_auth.json`)  
+> - **Archivo de notas:** Lee las calificaciones de mi archivo Excel ubicado en `/ruta/en/disco/mis_notas.xlsx`.  
+> 
+> Por favor abre el navegador con Playwright, haz clic en las casillas correspondientes de cada criterio según el Excel, guarda los cambios (`--auto-save`) y muéstrame una captura o tabla con los puntos asignados."*
+
+---
+
+## 🖼️ Caso 2: Calificar Rúbrica en Moodle Pasándole una Imagen
+
+Si tienes una foto, captura de pantalla o PDF donde se ve la rúbrica marcada con las opciones deseadas:
+
+> **Copia y pega este prompt a tu IA:**
+> 
+> *"Hola Antigravity. Mira la imagen adjunta donde se ven los criterios y niveles de la rúbrica que debo calificar.  
+> 
+> Por favor lee el script `moodle/rubric_grader.py` del repositorio clonado en mi disco y:  
+> 1. Inyecta mi cookie de sesión: `MoodleSession=TU_VALOR_AQUI` (o usa `sessions/moodle_auth.json`).  
+> 2. Navega a la entrega del estudiante: `[PEGA_AQUÍ_LA_URL_DE_CALIFICACIÓN]`.  
+> 3. Identifica en la imagen qué opción corresponde a cada criterio (*Does the brochure contain all the required information?*, *Vocabulary*, etc.).  
+> 4. Ejecuta los clics necesarios en la tabla de Moodle para marcar exactamente esos niveles.  
+> 5. Guarda la calificación y confírmame el puntaje total obtenido."*
+
+---
+
+## ⚡ Caso 3: Calificar Rápido con Perfil Automático (Máximo, Medio o Mínimo)
+
+Si quieres ponerle la nota máxima (o intermedia) a un trabajo excelente sin abrir Excel:
+
+> **Copia y pega este prompt a tu IA:**
+> 
+> *"Antigravity, por favor califica esta entrega de Moodle con nota máxima en todos los criterios de la rúbrica:  
+> - URL: `https://mi-universidad.edu.co/mod/assign/view.php?id=12345&action=grader`  
+> - Cookie: `MoodleSession=TU_VALOR_AQUI`  
+> 
+> Ejecuta `python -m moodle.rubric_grader --grading-url URL --session COOKIE --profile max --auto-save` desde el repositorio local y confírmame cuando esté guardada."*
+
+---
+
+## 📥 Caso 4: Extraer Examen o Cuestionario de Moodle para Estudiar
+
+> **Copia y pega este prompt a tu IA:**
+> 
+> *"Antigravity, por favor usa el script `moodle/quiz_extractor.py` del repositorio clonado en mi máquina para extraer todas las preguntas, respuestas correctas y explicaciones de esta revisión de Moodle:  
+> - URL: `https://mi-universidad.edu.co/mod/quiz/review.php?attempt=67890`  
+> - Cookie: `MoodleSession=TU_VALOR_AQUI`  
+> 
+> Guárdame el resultado en un archivo Markdown limpio en mi carpeta de notas académicas."*

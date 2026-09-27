@@ -32,41 +32,56 @@ playwright install chromium
 
 ---
 
-### Paso 2: Conectar tu Cuenta de Moodle de Forma Segura
-**Nunca** escribas tu contraseña en scripts ni se la des a nadie. Playwright usa un navegador real para que tú inicies sesión con tu cuenta institucional:
+### Paso 2: Conectar tu Cuenta de Moodle (Elige la opción que prefieras)
 
+#### Opción A: Pasándole tu Cookie de Sesión Directa (La más rápida)
+En tu navegador habitual con Moodle abierto:
+1. Presiona `F12` para abrir las herramientas de desarrollador.
+2. Ve a la pestaña **Application** (o **Almacenamiento**) -> **Cookies**.
+3. Busca y copia el valor de `MoodleSession` (una cadena alfanumérica).
+4. Ya puedes pasarle esa cookie al script con el parámetro `--session "MoodleSession=tu_cadena"`.
+
+#### Opción B: Inicio de Sesión Interactivo (Guarda la sesión localmente)
 ```bash
 python -m core.session_cli --login moodle
 ```
-1. Se abrirá una ventana de Chrome con la página oficial de tu universidad.
-2. Ingresas tu usuario, contraseña y apruebas el código en tu celular (2FA / Microsoft Authenticator).
-3. Una vez veas tu lista de cursos en la pantalla, vuelves a la ventana negra de la terminal y presionas **ENTER**.
-4. ¡Listo! Tu sesión queda guardada localmente en tu propio computador.
+Se abrirá una ventana de Chrome. Ingresas tu usuario, contraseña y 2FA. Cuando veas tus cursos, vuelves a la terminal y presionas **ENTER**.
 
 ---
 
-### Paso 3: Calificar con Rúbrica con un Solo Comando
+### Paso 3: Calificar con Rúbrica en Moodle
 
-Copia el enlace de la entrega de Moodle que deseas calificar y corre:
-
+#### 1. Calificar con Nota Máxima Instantánea:
 ```bash
-python -m moodle.rubric_grader --grading-url "https://tu-moodle.edu.co/mod/assign/view.php?id=12345&action=grader" --profile max
+python -m moodle.rubric_grader --grading-url "URL_DE_LA_TAREA" --profile max --auto-save
 ```
 
-#### ¿Qué hace el script por ti?
-- Entra a la página del estudiante usando tu sesión.
-- Lee automáticamente todos los criterios de la rúbrica (por ejemplo: *¿Contiene toda la información?, ¿Vocabulario pertinente?, etc.*).
-- **Hace los clics en todas las casillas de la rúbrica de forma instantánea.**
-- Puedes ver en tu pantalla cómo se marcan en verde todas las casillas en 1 segundo.
-- Si le agregas `--auto-save`, guarda y avanza al siguiente estudiante automáticamente:
-  ```bash
-  python -m moodle.rubric_grader --grading-url "URL_DE_LA_TAREA" --profile max --auto-save
-  ```
+#### 2. Calificar a partir de un archivo Excel de Notas:
+Si tienes un archivo Excel con las notas o niveles por criterio:
+```bash
+python -m moodle.rubric_grader --grading-url "URL_DE_LA_TAREA" --excel "/ruta/a/mi_archivo_notas.xlsx" --auto-save
+```
 
 ---
 
-## 💡 ¿Y si prefiero que una Inteligencia Artificial lo haga por mí?
-Si usas un asistente como **Antigravity**, **Claude** o **ChatGPT**:
-1. Abre el archivo [`ai_prompts/PROMPTS_FOR_AI.md`](ai_prompts/PROMPTS_FOR_AI.md).
-2. Copia la plantilla del caso que necesitas.
-3. Pégasela a la IA pasándole la URL de tu tarea. La IA ejecutará el script en segundo plano y te devolverá el reporte listo.
+## 🤖 ¿Prefieres que una Inteligencia Artificial (Antigravity / Claude) lo haga por ti?
+
+¡No necesitas ejecutar ningún comando! Puedes delegarle todo a la IA de la siguiente manera:
+
+1. **Clona el repositorio en tu computador:** Anota la ruta donde quedó guardado (ej. `C:\Users\tu_usuario\playwright-academic-automator` o `/home/usuario/playwright-academic-automator`).
+2. **Abre tu chat con la IA y dile:**
+   > *"Hola. Tengo el repositorio clonado en `/ruta/local/playwright-academic-automator`.  
+   > Necesito calificar la entrega de un estudiante en Moodle: `https://moodle.edu.co/mod/assign/view.php?id=12345&action=grader`.  
+   > Mi cookie de sesión es `MoodleSession=xxxxxx`.  
+   > 
+   > **Opción A (Con Excel):** Aquí tienes la ruta de mi archivo Excel con las notas: `/ruta/a/notas.xlsx`.  
+   > **Opción B (Con Imagen):** Te adjunto esta imagen donde se ve la rúbrica con las opciones que quiero marcar.  
+   > 
+   > Por favor usa el script `moodle/rubric_grader.py` para hacer los clics necesarios en la rúbrica y guarda la calificación."*
+
+3. **La IA:**
+   - Leerá el script local del repositorio.
+   - Si le pasaste un Excel, extraerá las notas por criterio.
+   - Si le pasaste una imagen, leerá visualmente la rúbrica y deducirá los niveles exactos a marcar.
+   - Levantará Playwright inyectando tu cookie de sesión y ejecutará los clics en la rúbrica en segundos.
+   - Te confirmará el puntaje total guardado.
